@@ -16,12 +16,6 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Show repository files
-        shell: cmd
-        run: |
-          echo === Файлы в репозитории ===
-          dir *.py
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -30,26 +24,24 @@ jobs:
       - name: Build EXE
         shell: cmd
         run: |
-          if exist main.py (
-            echo Building from main.py
-            pyinstaller --onefile --windowed --name PKRV_Monitor --hidden-import paramiko main.py
-          ) else if exist app.py (
-            echo Building from app.py
-            pyinstaller --onefile --windowed --name PKRV_Monitor --hidden-import paramiko app.py
-          ) else if exist stands_monitor.py (
-            echo Building from stands_monitor.py
-            pyinstaller --onefile --windowed --name PKRV_Monitor --hidden-import paramiko stands_monitor.py
-          ) else (
-            echo ERROR: No Python file found!
-            dir *.py
-            exit /b 1
-          )
+          pyinstaller --onefile --windowed --name PKRV_Monitor --hidden-import paramiko main.py
 
-      - name: Check build result
+      - name: Create release package
         shell: cmd
-        run: dir dist\
+        run: |
+          mkdir release
+          copy dist\PKRV_Monitor.exe release\
+          copy database.py release\
+          echo @echo off > release\запустить.bat
+          echo cd /d "%%~dp0" >> release\запустить.bat
+          echo start PKRV_Monitor.exe >> release\запустить.bat
+          echo. >> release\запустить.bat
+          echo echo ============================= >> release\запустить.bat
+          echo echo PKRV Monitor запущен >> release\запустить.bat
+          echo echo ============================= >> release\запустить.bat
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
         with:
-          name: PKRV_Monitor
-          path: dist/PKRV_Monitor.exe
+          name: PKRV_Monitor_Release
+          path: release/
