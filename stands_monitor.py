@@ -5,14 +5,13 @@ import sys
 import os
 from datetime import datetime
 from database import Database
+from cvs_manager import CVSManager, CVSControlPanel
 
 # Функция для логирования
 def log_to_file(message):
     """Запись сообщения в файл 1.txt"""
     try:
-        # Путь к файлу в папке с проектом
         log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "1.txt")
-        
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(f"[{timestamp}] {message}\n")
@@ -80,17 +79,16 @@ class MainApplication:
         
         self.stands_monitor = StandsMonitor()
         self.current_user_id = None
+        self.cvs_manager = CVSManager(ssh_user="pkrv", ssh_password="zxcv")
         
         # Показываем окно авторизации
         self.show_login()
     
     def show_login(self):
         log_to_file("Отображение окна авторизации")
-        # Очищаем главное окно
         for widget in self.root.winfo_children():
             widget.destroy()
         
-        # Создаем фрейм для авторизации
         login_frame = ttk.Frame(self.root, padding="20")
         login_frame.place(relx=0.5, rely=0.5, anchor="center")
         
@@ -110,7 +108,6 @@ class MainApplication:
     def login(self):
         username = self.username_entry.get()
         log_to_file(f"Попытка входа: пользователь '{username}'")
-        
         password = self.password_entry.get()
         
         try:
@@ -131,7 +128,6 @@ class MainApplication:
     def register(self):
         username = self.username_entry.get()
         log_to_file(f"Попытка регистрации: '{username}'")
-        
         password = self.password_entry.get()
         
         try:
@@ -147,27 +143,26 @@ class MainApplication:
     
     def show_main_interface(self):
         log_to_file("Отображение главного интерфейса")
-        # Очищаем главное окно
         for widget in self.root.winfo_children():
             widget.destroy()
         
-        # Создаем панель инструментов
+        # Панель инструментов
         toolbar = ttk.Frame(self.root)
         toolbar.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
         
         ttk.Button(toolbar, text="История входов", command=self.show_history).pack(side=tk.LEFT, padx=5)
         ttk.Button(toolbar, text="Выйти", command=self.logout).pack(side=tk.RIGHT, padx=5)
         
-        # Создаем Notebook для вкладок
+        # Notebook для вкладок
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Создаем вкладки для каждого стенда
+        # Вкладки для стендов
         self.create_stand_tab(notebook, "192.168.243.248", "ГОЗ")
         self.create_stand_tab(notebook, "192.168.243.249", "Арктика")
         self.create_stand_tab(notebook, "192.168.243.254", "С1М")
         
-        # Создаем общую вкладку с системами и режимами
+        # Вкладка систем и режимов
         self.create_systems_tab(notebook)
         
         log_to_file("Главный интерфейс отображен успешно")
@@ -175,16 +170,31 @@ class MainApplication:
     def create_stand_tab(self, notebook, ip, name):
         log_to_file(f"Создание вкладки стенда: {name} ({ip})")
         stand_data = self.stands_monitor.stands[ip]
-        frame = ttk.Frame(notebook)
-        notebook.add(frame, text=f"{name} ({ip})")
+        
+        # Основной фрейм с прокруткой
+        canvas = tk.Canvas(notebook)
+        scrollbar = ttk.Scrollbar(notebook, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        notebook.add(canvas, text=f"{name} ({ip})")
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
         
         # Заголовок
-        ttk.Label(frame, text=f"Стенд {name}", font=("Arial", 14, "bold")).pack(pady=10)
-        ttk.Label(frame, text=f"IP: {ip}").pack()
+        ttk.Label(scrollable_frame, text=f"Стенд {name}", font=("Arial", 14, "bold")).pack(pady=10)
+        ttk.Label(scrollable_frame, text=f"IP: {ip}").pack()
         
         # Связанные устройства
         if stand_data["devices"]:
-            devices_frame = ttk.LabelFrame(frame, text="Связанные устройства", padding=10)
+            devices_frame = ttk.LabelFrame(scrollable_frame, text="Связанные устройства", padding=10)
             devices_frame.pack(fill=tk.X, padx=10, pady=5)
             
             devices_text = ", ".join(stand_data["devices"])
@@ -192,7 +202,7 @@ class MainApplication:
         
         # Компоненты
         if stand_data["components"]:
-            components_frame = ttk.LabelFrame(frame, text="Компоненты", padding=10)
+            components_frame = ttk.LabelFrame(scrollable_frame, text="Компоненты", padding=10)
             components_frame.pack(fill=tk.X, padx=10, pady=5)
             
             for component, versions in stand_data["components"].items():
@@ -201,14 +211,18 @@ class MainApplication:
         
         # Директория
         if stand_data["directory"]:
-            dir_frame = ttk.LabelFrame(frame, text="Директория бинарников", padding=10)
+            dir_frame = ttk.LabelFrame(scrollable_frame, text="Директория бинарников", padding=10)
             dir_frame.pack(fill=tk.X, padx=10, pady=5)
             
             dir_text = " → ".join(stand_data["directory"])
             ttk.Label(dir_frame, text=dir_text).pack(anchor=tk.W)
         
+        # ========== БЛОК УПРАВЛЕНИЯ ЦВС ==========
+        cvs_panel = CVSControlPanel(scrollable_frame, self.cvs_manager, ip, name)
+        cvs_panel.pack(fill=tk.X, padx=10, pady=10)
+        
         # Кнопка конфигурации
-        ttk.Button(frame, text="СКОНФИГУРИРОВАТЬ СТЕНД", 
+        ttk.Button(scrollable_frame, text="СКОНФИГУРИРОВАТЬ СТЕНД", 
                   command=lambda s=name: self.configure_stand(s)).pack(pady=10)
     
     def create_systems_tab(self, notebook):
@@ -291,7 +305,6 @@ if __name__ == "__main__":
         log_to_file(error_msg)
         print(error_msg)
         
-        # Показываем ошибку пользователю
         try:
             from tkinter import messagebox
             messagebox.showerror("Критическая ошибка", f"Произошла ошибка:\n\n{e}\n\nПодробности в файле 1.txt")
