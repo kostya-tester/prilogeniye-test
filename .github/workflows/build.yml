@@ -3,7 +3,6 @@ name: Build PKRV_Monitor EXE
 on:
   push:
     branches: [ main ]
-    tags: [ 'v*' ]
   workflow_dispatch:
 
 jobs:
@@ -11,11 +10,16 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v5        # ← обновлено с v4
-      
-      - uses: actions/setup-python@v6    # ← обновлено с v5
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
+      - name: Show repository files
+        run: |
+          echo "=== Файлы в репозитории ==="
+          dir *.py
 
       - name: Install dependencies
         run: |
@@ -23,7 +27,18 @@ jobs:
           pip install paramiko pyinstaller
 
       - name: Build EXE
-        run: pyinstaller --onefile --windowed --name PKRV_Monitor --hidden-import paramiko main.py
+        run: |
+          echo "Поиск главного Python файла..."
+          for %%f in (main.py app.py stands_monitor.py) do (
+            if exist %%f (
+              echo "Найден файл: %%f"
+              pyinstaller --onefile --windowed --name PKRV_Monitor --hidden-import paramiko %%f
+              goto :done
+            )
+          )
+          echo "ОШИБКА: Не найден ни один из файлов: main.py, app.py, stands_monitor.py"
+          exit /b 1
+          :done
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
