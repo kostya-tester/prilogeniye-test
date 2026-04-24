@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 from database import Database
 from cvs_manager import CVSManager, CVSControlPanel
+from orangepi_module import OrangePiDetector, OrangePiFrame
 
 # Функция для логирования
 def log_to_file(message):
@@ -165,6 +166,10 @@ class MainApplication:
         # Вкладка систем и режимов
         self.create_systems_tab(notebook)
         
+        # Вкладка Orange Pi
+        orangepi_frame = OrangePiFrame(notebook)
+        notebook.add(orangepi_frame, text="🍊 Orange Pi")
+        
         log_to_file("Главный интерфейс отображен успешно")
     
     def create_stand_tab(self, notebook, ip, name):
@@ -217,7 +222,7 @@ class MainApplication:
             dir_text = " → ".join(stand_data["directory"])
             ttk.Label(dir_frame, text=dir_text).pack(anchor=tk.W)
         
-        # ========== БЛОК УПРАВЛЕНИЯ ЦВС ==========
+        # Блок управления ЦВС
         cvs_panel = CVSControlPanel(scrollable_frame, self.cvs_manager, ip, name)
         cvs_panel.pack(fill=tk.X, padx=10, pady=10)
         
