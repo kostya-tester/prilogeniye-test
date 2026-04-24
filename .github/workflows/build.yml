@@ -17,8 +17,9 @@ jobs:
           python-version: '3.10'
 
       - name: Show repository files
+        shell: cmd
         run: |
-          echo "=== Файлы в репозитории ==="
+          echo === Файлы в репозитории ===
           dir *.py
 
       - name: Install dependencies
@@ -27,21 +28,28 @@ jobs:
           pip install paramiko pyinstaller
 
       - name: Build EXE
+        shell: cmd
         run: |
-          echo "Поиск главного Python файла..."
-          for %%f in (main.py app.py stands_monitor.py) do (
-            if exist %%f (
-              echo "Найден файл: %%f"
-              pyinstaller --onefile --windowed --name PKRV_Monitor --hidden-import paramiko %%f
-              goto :done
-            )
+          if exist main.py (
+            echo Building from main.py
+            pyinstaller --onefile --windowed --name PKRV_Monitor --hidden-import paramiko main.py
+          ) else if exist app.py (
+            echo Building from app.py
+            pyinstaller --onefile --windowed --name PKRV_Monitor --hidden-import paramiko app.py
+          ) else if exist stands_monitor.py (
+            echo Building from stands_monitor.py
+            pyinstaller --onefile --windowed --name PKRV_Monitor --hidden-import paramiko stands_monitor.py
+          ) else (
+            echo ERROR: No Python file found!
+            dir *.py
+            exit /b 1
           )
-          echo "ОШИБКА: Не найден ни один из файлов: main.py, app.py, stands_monitor.py"
-          exit /b 1
-          :done
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Check build result
+        shell: cmd
+        run: dir dist\
+
+      - uses: actions/upload-artifact@v4
         with:
           name: PKRV_Monitor
           path: dist/PKRV_Monitor.exe
