@@ -1,22 +1,134 @@
-name: Build Windows EXE
-on: [push]
-jobs:
-  build:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: |
-          pip install pyinstaller
-      - name: Build with PyInstaller
-        run: |
-          pyinstaller --onefile app.py
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4    # <--- ИЗМЕНЕНО С v3 НА v4
-        with:
-          name: Windows-EXE
-          path: dist/app.exe
+# Образ с Python
+image: python:3.10
+
+# Стадии сборки
+stages:
+  - test
+  - build
+  - package
+  - deploy
+
+# Переменные
+variables:
+  PYTHONUNBUFFERED: "1"
+  APP_NAME: "PKRV_Monitor"
+
+# Кэш для ускорения сборки
+cache:
+  paths:
+    - .pip-cache/
+    - build/
+
+# Проверка синтаксиса
+test:
+  stage: test
+  before_script:
+    - pip install --cache-dir .pip-cache -r requirements.txt
+  script:
+    - echo "Проверка синтаксиса Python файлов..."
+    - python -m py_compile main.py
+    - python -m py_compile database.py
+    - echo "Синтаксис корректен!"
+
+# Сборка .exe для Windows
+build-windows:
+  stage: build
+  image: python:3.10  # Linux образ, но собираем для Windows
+  before_script:
+    - pip install --cache-dir .pip-cache -r requirements.txt
+    - apt-get update && apt-get install -y zip
+  script:
+    - echo "Сборка исполняемого файла для Windows..."
+    - pyinstaller --onefile --windowed --name $APP_NAME main.py
+    - cd dist
+    - zip -r ../${APP_NAME}_Windows.zip *
+    - cd ..
+  artifacts:
+    name: "$APP_NAME-Windows-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - ${APP_NAME}_Windows.zip
+      - dist/${APP_NAME}.exe
+    expire_in: 30 days
+  only:
+    - main
+    - develop
+    - tags
+
+# Сборка для Linux
+build-linux:
+  stage: build
+  before_script:
+    - pip install --cache-dir .pip-cache -r requirements.txt
+    - apt-get update && apt-get install -y zip
+  script:
+    - echo "Сборка для Linux..."
+    - pyinstaller --onefile --name $APP_NAME main.py
+    - cd dist
+    - zip -r ../${APP_NAME}_Linux.zip *
+    - cd ..
+  artifacts:
+    name: "$APP_NAME-Linux-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - ${APP_NAME}_Linux.zip
+      - dist/${APP_NAME}
+    expire_in: 30 days
+  only:
+    - main
+    - develop
+    - tags
+
+# Пакетирование с файлами проекта
+package:
+  stage: package
+  before_script:
+    - pip install --cache-dir .pip-cache -r requirements.txt
+    - apt-get update && apt-get install -y zip
+  script:
+    - echo "Создание полного пакета..."
+    - mkdir -p release
+    - cp dist/$APP_NAME.exe release/ 2>/dev/null || cp dist/$APP_NAME release/ 2>/dev/null || true
+    - cp database.py release/
+    - cp README.md release/ 2>/dev/null || echo "README отсутствует"
+    # Создаем run.bat для Windows
+    - echo "@echo off" > release/запустить.bat
+    - echo "cd /d \"%~dp0\"" >> release/запустить.bat
+    - echo "start $APP_NAME.exe" >> release/запустить.bat
+    # Архив
+    - cd release
+    - zip -r ../${APP_NAME}_Full_$CI_COMMIT_SHORT_SHA.zip *
+    - cd ..
+  artifacts:
+    name: "$APP_NAME-Full-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - ${APP_NAME}_Full_$CI_COMMIT_SHORT_SHA.zip
+      - release/
+    expire_in: 30 days
+  only:
+    - main
+    - tags
+
+# Деплой (релиз при теге)
+deploy-release:
+  stage: deploy
+  script:
+    - echo "Создание релиза для тега $CI_COMMIT_TAG"
+    - mkdir -p release
+    - cp dist/$APP_NAME.exe release/ 2>/dev/null || true
+    - cp database.py release/
+    - cp README.md release/ 2>/dev/null || true
+    - echo "@echo off" > release/запустить.bat
+    - echo "cd /d \"%~dp0\"" >> release/запустить.bat
+    - echo "start $APP_NAME.exe" >> release/запустить.bat
+  artifacts:
+    name: "$CI_COMMIT_TAG"
+    paths:
+      - release/
+  only:
+    - tags
+  release:
+    tag_name: $CI_COMMIT_TAG
+    description: "Релиз версии $CI_COMMIT_TAG"
+    assets:
+      links:
+        - name: "${APP_NAME}_${CI_COMMIT_TAG}.zip"
+          url: "${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/file/release.zip"
