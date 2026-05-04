@@ -1,8 +1,3 @@
-"""
-Модуль для управления системными процессами
-Позволяет останавливать, запускать и перезапускать процессы
-"""
-
 import subprocess
 import logging
 import signal
@@ -12,13 +7,13 @@ from typing import List, Dict, Optional
 logger = logging.getLogger(__name__)
 
 class ProcessManager:
-    """Класс для управления процессами в системе"""
+
     
     def __init__(self):
         self._process_cache = {}
     
     def find_process_by_name(self, process_name: str) -> Optional[psutil.Process]:
-        """Найти процесс по имени"""
+
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
                 if process_name.lower() in proc.info['name'].lower() or \
@@ -29,7 +24,7 @@ class ProcessManager:
         return None
     
     def stop_process(self, process_name: str) -> bool:
-        """Остановить процесс"""
+
         proc = self.find_process_by_name(process_name)
         if proc:
             try:
@@ -48,7 +43,7 @@ class ProcessManager:
         return False
     
     def start_process(self, command: str, args: List[str] = None) -> bool:
-        """Запустить новый процесс по команде"""
+     
         try:
             cmd = [command] + (args or [])
             process = subprocess.Popen(
@@ -76,7 +71,7 @@ class ProcessManager:
         return self.start_process(cmd_to_start)
     
     def list_all_processes(self) -> List[Dict]:
-        """Получить список всех процессов с информацией"""
+        
         processes = []
         for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
             try:
